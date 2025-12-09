@@ -4,10 +4,10 @@ import java.time.LocalDate
 
 // Алгебраический тип данных: один sealed trait + фиксированный набор case class
 
-sealed trait Item extends HasPrice, HasWeight:
-  def name: String
-  def price: BigDecimal
-  def weight: Double
+sealed trait Item:
+  def name: String //имя
+  def price: BigDecimal //цена
+  def weight: Double //вес
 
 final case class RegularItem(
                               name: String,
