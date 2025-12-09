@@ -1,29 +1,43 @@
 package shop.model
 
 final case class Purchase(
-                           customer: Customer, //кто покупает
-                           items: List[Item] //список купленных товаров
+                           customer: Customer,
+                           nodes: List[Node]   // было: List[Item]
                          ):
 
-  // считает общую стоимость покупки
   def totalPrice: BigDecimal =
-    items.foldLeft(BigDecimal(0))((acc, it) => acc + it.price)
+    nodes.foldLeft(BigDecimal(0))((acc, n) => acc + n.totalPrice)
 
-  // общий вес
   def totalWeight: Double =
-    items.foldLeft(0.0)((acc, it) => acc + it.weight)
+    nodes.foldLeft(0.0)((acc, n) => acc + n.totalWeight)
 
-  // общий объём только напитков
   def totalVolume: Double =
-    items.foldLeft(0.0) {
+    nodes.foldLeft(0.0) {
       case (acc, DrinkItem(_, _, _, volume, _)) => acc + volume
-      case (acc, _)                             => acc
+      case (acc, Box(_, children))              => // если хотим по коробкам ходить
+        acc + children.foldLeft(0.0) {
+          case (a, d: DrinkItem)   => a + d.volume
+          case (a, b: Box)         => a + b.totalVolume   // если сделать метод
+          case (a, _)              => a
+        }
+      case (acc, _) => acc
     }
 
   override def toString: String =
-    val lines = items.map { it =>
-      f"${it.name}%-15s  цена: ${it.price}%-7s  вес: ${it.weight}%.2f кг"
-    }
-    (s"Покупатель: ${customer.name}" :: lines ::: List(
-      f"ИТОГО: цена = $totalPrice%.2f, вес = $totalWeight%.2f кг"
-    )).mkString("\n")
+    def render(node: Node, indent: String = ""): List[String] =
+      node match
+        case r: RegularItem =>
+          List(s"$indent- Обычный товар: ${r.name}, цена: ${r.price}, вес: ${r.weight}")
+        case f: FoodItem =>
+          List(s"$indent- Продукт: ${f.name}, цена: ${f.price}, вес: ${f.weight}, годен до: ${f.expirationDate}")
+        case d: DrinkItem =>
+          List(s"$indent- Напиток: ${d.name}, цена: ${d.price}, вес: ${d.weight}, объём: ${d.volume}, газированный: ${d.isCarbonated}")
+        case Box(name, children) =>
+          val header = s"$indent+ Коробка: $name (итоговая цена: ${node.totalPrice}, вес: ${node.totalWeight})"
+          val childs = children.flatMap(ch => render(ch, indent + "  "))
+          header :: childs
+
+    val header = s"Покупатель: ${customer.name}"
+    val body   = nodes.flatMap(n => render(n))
+    val footer = f"ИТОГО: цена = $totalPrice%.2f, вес = $totalWeight%.2f кг"
+    (header :: body) :+ footer mkString "\n"
