@@ -1,0 +1,34 @@
+package shop.model
+
+import java.time.LocalDate
+
+// Алгебраический тип данных: один sealed trait + фиксированный набор case class
+
+sealed trait Item:
+  def name: String //имя
+  def price: BigDecimal //цена
+  def weight: Double //вес
+
+final case class RegularItem(
+                              name: String,
+                              price: BigDecimal,
+                              weight: Double,
+                              category: String
+                            ) extends Item
+
+final case class FoodItem(
+                           name: String,
+                           price: BigDecimal,
+                           weight: Double,
+                           expirationDate: LocalDate
+                         ) extends Item
+
+final case class DrinkItem(
+                            name: String,
+                            price: BigDecimal,
+                            weight: Double,
+                            volume: Double,          // литры
+                            isCarbonated: Boolean
+                          ) extends Item
+
+final case class Customer(name: String) //модель покупателя
