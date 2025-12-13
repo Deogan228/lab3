@@ -1,35 +1,21 @@
 package shop
 
-import shop.model.*
 import shop.io.Input
 import shop.io.ConsoleAsk.*
+import shop.model.*
 
 object Main:
   def main(args: Array[String]): Unit =
-    val in0 = Input.lines //Берём ленивый поток строк с консоли
+    val in0 = Input.lines
 
-    //Читаем имя покупателя
-    val (custName, in1) = askString(
-      prompt       = "Введите имя покупателя:",
-      errorMessage = "Ошибка: имя не может быть пустым.",
-      validate     = s => s.nonEmpty && s.exists(_.isLetter)
-    )(in0)
+    val (customerName, in1) = askName("Введите имя покупателя:")(in0)
+    val customer = Customer(customerName)
 
-    //Создаём покупателя
-    val customer = Customer(custName)
+    val (count, in2) = askPositiveInt("Сколько элементов на верхнем уровне покупки?")(in1)
+    val (roots, _)   = readNodeList(count, in2)
 
-    val (count, in2) = askInt(
-      prompt       = "Сколько товаров в покупке?",
-      errorMessage = "Ошибка: введите натуральное число (> 0).",
-      validate     = _ > 0
-    )(in1)
-
-    val (items, _) = readItemList(count, in2)
-
-    //Собираем покупку
-    val purchase = Purchase(customer, items)
+    val purchase = Purchase(customer, roots)
 
     println()
     println("--- Итоговая покупка ---")
-    println(purchase)
-    println(f"\nОбщий объём напитков: ${purchase.totalVolume}%.2f л")
+    println(PrettyPrint.renderPurchase(purchase))

@@ -1,21 +1,22 @@
-package shop.model  // или package model, если у тебя так
+package shop.model
 
 import java.time.LocalDate
 
-// Узел дерева покупки: либо товар (лист), либо коробка
+// Узел дерева покупки: либо товар, либо коробка с узлами
 sealed trait Node:
   def totalPrice: BigDecimal
   def totalWeight: Double
-  def totalVolume: Double   // ← добавили общее понятие "объём"
+  def totalVolume: Double
 
+// Лист дерева: конкретный товар
 sealed trait Item extends Node:
   def name: String
   def price: BigDecimal
   def weight: Double
 
-  override def totalPrice: BigDecimal = price
-  override def totalWeight: Double    = weight
-  override def totalVolume: Double    = 0.0  // по умолчанию объёма нет
+  final override def totalPrice: BigDecimal = price
+  final override def totalWeight: Double    = weight
+  override def totalVolume: Double          = 0.0
 
 final case class RegularItem(
                               name: String,
@@ -38,13 +39,12 @@ final case class DrinkItem(
                             volume: Double,
                             isCarbonated: Boolean
                           ) extends Item:
-  override def totalVolume: Double = volume  // ← у напитка объём есть
+  override def totalVolume: Double = volume
 
 final case class Box(
                       name: String,
                       children: List[Node]
                     ) extends Node:
-
   override def totalPrice: BigDecimal =
     children.foldLeft(BigDecimal(0))((acc, n) => acc + n.totalPrice)
 

@@ -1,144 +1,176 @@
 package shop.io
 
-import scala.util.Try
 import scala.annotation.tailrec
+import scala.util.Try
 import java.time.LocalDate
 
 import shop.model.*
 
-// Здесь всё про ввод: safe-ask + чтение Item/списка Item
-
 object ConsoleAsk:
+  
+  type SResult[A] = (A, LazyList[String])
 
-  // Универсальный safe-ввод значения типа T из LazyList
-  private def ask[T](
-                      prompt: String, //текст вопроса, который печатаем пользователю
-                      parse: String => Option[T], //функция парсинга строки
-                      errorMessage: String, //что вывести при ошибке
-                      validate: T => Boolean = (_: T) => true
-                    )(in: LazyList[String]): (T, LazyList[String]) =
+  private type Parser[A]    = String => Option[A]
+  private type Validator[A] = A => Boolean
+
+  //базовые парсеры 
+  private val parseInt: Parser[Int] =
+    s => Try(s.toInt).toOption
+
+  private val parseDouble: Parser[Double] =
+    s => Try(s.toDouble).toOption
+
+  private val parseDecimal: Parser[BigDecimal] =
+    s => Try(BigDecimal(s)).toOption
+
+  private val parseString: Parser[String] =
+    s => Option(s).map(_.trim)
+
+  //универсальный safe input 
+  private def ask[A](
+                      prompt: String,
+                      parser: Parser[A],
+                      error: String,
+                      validate: Validator[A] = (_: A) => true
+                    )(in: LazyList[String]): SResult[A] =
+
     @tailrec
-    def loop(stream: LazyList[String]): (T, LazyList[String]) =
+    def loop(stream: LazyList[String]): SResult[A] =
       println(prompt)
       stream match
-        case h #:: t => //если есть хотя бы одна строка
-          val raw = h.trim //берём текущую строку
-          parse(raw) match
-            case Some(v) if validate(v) =>
-              (v, t)
+        case h #:: t =>
+          val raw = h.trim
+          parser(raw) match
+            case Some(v) if validate(v) => (v, t)
             case _ =>
-              println(errorMessage)
-              loop(t) //пробуем следующую строку
-        case _ => //если список кончился, кидаем исключение
+              println(error)
+              loop(t)
+        case _ =>
           throw new RuntimeException("Неожиданный конец ввода")
+
     loop(in)
 
-  def askString(
-                 prompt: String,
-                 errorMessage: String,
-                 validate: String => Boolean = _.nonEmpty
-               )(in: LazyList[String]): (String, LazyList[String]) =
-    ask[String](prompt, s => Some(s.trim), errorMessage, validate)(in)
-
-  def askInt(
-              prompt: String,
-              errorMessage: String,
-              validate: Int => Boolean = _ => true
-            )(in: LazyList[String]): (Int, LazyList[String]) =
-    ask[Int](prompt, s => Try(s.toInt).toOption, errorMessage, validate)(in)
-
-  def askDouble(
-                 prompt: String,
-                 errorMessage: String,
-                 validate: Double => Boolean = _ => true
-               )(in: LazyList[String]): (Double, LazyList[String]) =
-    ask[Double](prompt, s => Try(s.toDouble).toOption, errorMessage, validate)(in)
-
-  def askBigDecimal(
-                     prompt: String,
-                     errorMessage: String,
-                     validate: BigDecimal => Boolean = _ => true
-                   )(in: LazyList[String]): (BigDecimal, LazyList[String]) =
-    ask[BigDecimal](prompt, s => Try(BigDecimal(s)).toOption, errorMessage, validate)(in)
-
-  // Тип товара для выбора
-  enum ItemType:
-    case Regular, Food, Drink
-
-  // Чтение одного Item из LazyList
-  def readItem(in: LazyList[String]): (Item, LazyList[String]) =
-    val (kindInt, in1) = askInt(
-      prompt       = "Тип товара (1 - обычный, 2 - продукт, 3 - напиток):",
-      errorMessage = "Ошибка: введите 1, 2 или 3.",
-      validate     = n => n >= 1 && n <= 3
+  //удобные обёртки
+  def askName(prompt: String)(in: LazyList[String]): SResult[String] =
+    ask[String](
+      prompt,
+      parseString,
+      "Ошибка: введите корректное имя (не пусто, есть буква).",
+      s => s.nonEmpty && s.exists(_.isLetter)
     )(in)
 
-    //Переводим число в ItemType
-    val kind = kindInt match
-      case 2 => ItemType.Food
-      case 3 => ItemType.Drink
-      case _ => ItemType.Regular
+  def askNonEmpty(prompt: String, field: String)(in: LazyList[String]): SResult[String] =
+    ask[String](
+      prompt,
+      parseString,
+      s"Ошибка: поле '$field' не может быть пустым.",
+      _.nonEmpty
+    )(in)
 
-    val (name, in2) = askString(
-      prompt       = "Название товара:",
-      errorMessage = "Ошибка: название не может быть пустым.",
-      validate     = s => s.nonEmpty && s.exists(_.isLetter)
-    )(in1)
+  def askPositiveInt(prompt: String)(in: LazyList[String]): SResult[Int] =
+    ask[Int](
+      prompt,
+      parseInt,
+      "Ошибка: введите целое число > 0.",
+      _ > 0
+    )(in)
 
-    val (price, in3) = askBigDecimal(
-      prompt       = "Цена (положительное число):",
-      errorMessage = "Ошибка: введите положительное число.",
-      validate     = _ > 0
-    )(in2)
+  def askNonNegativeInt(prompt: String)(in: LazyList[String]): SResult[Int] =
+    ask[Int](
+      prompt,
+      parseInt,
+      "Ошибка: введите целое число >= 0.",
+      _ >= 0
+    )(in)
 
-    val (weight, in4) = askDouble(
-      prompt       = "Вес в килограммах (положительное число):",
-      errorMessage = "Ошибка: введите положительное число.",
-      validate     = _ > 0
-    )(in3)
+  def askPositiveDouble(prompt: String)(in: LazyList[String]): SResult[Double] =
+    ask[Double](
+      prompt,
+      parseDouble,
+      "Ошибка: введите число > 0.",
+      _ > 0
+    )(in)
 
+  def askPositiveDecimal(prompt: String)(in: LazyList[String]): SResult[BigDecimal] =
+    ask[BigDecimal](
+      prompt,
+      parseDecimal,
+      "Ошибка: введите число > 0.",
+      _ > 0
+    )(in)
+
+  def askYesNo(prompt: String)(in: LazyList[String]): SResult[Boolean] =
+    val (x, rest) = ask[Int](
+      prompt + " (1 - да, 0 - нет)",
+      parseInt,
+      "Ошибка: введите 1 или 0.",
+      n => n == 0 || n == 1
+    )(in)
+    (x == 1, rest)
+
+  //выбор типа узла
+  enum NodeKind:
+    case Regular, Food, Drink, Box
+
+  private def askNodeKind(in: LazyList[String]): SResult[NodeKind] =
+    val (k, rest) = ask[Int](
+      "Выберите тип: 1-обычный товар, 2-продукт, 3-напиток, 4-коробка",
+      parseInt,
+      "Ошибка: введите 1/2/3/4.",
+      n => n >= 1 && n <= 4
+    )(in)
+
+    val kind = k match
+      case 2 => NodeKind.Food
+      case 3 => NodeKind.Drink
+      case 4 => NodeKind.Box
+      case _ => NodeKind.Regular
+
+    (kind, rest)
+
+  //чтение одного Node
+  def readNode(in: LazyList[String]): SResult[Node] =
+    val (kind, in1) = askNodeKind(in)
     kind match
-      case ItemType.Regular =>
-        val (cat, in5) = askString(
-          prompt       = "Категория товара:",
-          errorMessage = "Ошибка: категория не может быть пустой.",
-          validate     = _.nonEmpty
-        )(in4)
-        (RegularItem(name, price, weight, cat), in5)
+      case NodeKind.Regular => readRegular(in1)
+      case NodeKind.Food    => readFood(in1)
+      case NodeKind.Drink   => readDrink(in1)
+      case NodeKind.Box     => readBox(in1)
 
-      case ItemType.Food =>
-        val (days, in5) = askInt(
-          prompt       = "Срок годности (через сколько дней, целое неотрицательное):",
-          errorMessage = "Ошибка: введите целое число 0 или больше.",
-          validate     = _ >= 0
-        )(in4)
-        val exp = LocalDate.now().plusDays(days.toLong)
-        (FoodItem(name, price, weight, exp), in5)
+  //чтение конкретных вариантов
+  private def readCommonItemFields(in: LazyList[String]): SResult[(String, BigDecimal, Double)] =
+    val (name, in1)   = askNonEmpty("Название товара:", "name")(in)
+    val (price, in2)  = askPositiveDecimal("Цена:")(in1)
+    val (weight, in3) = askPositiveDouble("Вес (кг):")(in2)
+    ((name, price, weight), in3)
 
-      case ItemType.Drink =>
-        val (vol, in5) = askDouble(
-          prompt       = "Объём в литрах (положительное число):",
-          errorMessage = "Ошибка: введите положительное число.",
-          validate     = _ > 0
-        )(in4)
+  private def readRegular(in: LazyList[String]): SResult[Node] =
+    val ((name, price, weight), in1) = readCommonItemFields(in)
+    val (cat, in2) = askNonEmpty("Категория:", "category")(in1)
+    (RegularItem(name, price, weight, cat), in2)
 
-        val (flag, in6) = askInt(
-          prompt       = "Газированный? (1 - да, 0 - нет):",
-          errorMessage = "Ошибка: введите 1 или 0.",
-          validate     = n => n == 0 || n == 1
-        )(in5)
+  private def readFood(in: LazyList[String]): SResult[Node] =
+    val ((name, price, weight), in1) = readCommonItemFields(in)
+    val (days, in2) = askNonNegativeInt("Через сколько дней истечёт срок годности?")(in1)
+    val exp = LocalDate.now().plusDays(days.toLong)
+    (FoodItem(name, price, weight, exp), in2)
 
-        val carbonated = flag == 1
-        (DrinkItem(name, price, weight, vol, carbonated), in6)
+  private def readDrink(in: LazyList[String]): SResult[Node] =
+    val ((name, price, weight), in1) = readCommonItemFields(in)
+    val (vol, in2) = askPositiveDouble("Объём (литры):")(in1)
+    val (gaz, in3) = askYesNo("Газированный?")(in2)
+    (DrinkItem(name, price, weight, vol, gaz), in3)
 
-  // Чтение списка товаров (ADT Items) рекурсивно, без while/var
+  private def readBox(in: LazyList[String]): SResult[Node] =
+    val (boxName, in1) = askNonEmpty("Название коробки:", "box name")(in)
+    val (n, in2) = askNonNegativeInt("Сколько элементов внутри коробки?")(in1)
+    val (children, in3) = readNodeList(n, in2)
+    (Box(boxName, children), in3)
+
+  //чтение списка Node
   @tailrec
-  def readItemList(
-                    n: Int, //сколько осталось прочитать
-                    in: LazyList[String], //текущий поток строк
-                    acc: List[Item] = Nil //уже собранные товары (накапливаем в обратном порядке)
-                  ): (List[Item], LazyList[String]) =
+  def readNodeList(n: Int, in: LazyList[String], acc: List[Node] = Nil): SResult[List[Node]] =
     if n <= 0 then (acc.reverse, in)
     else
-      val (it, inNext) = readItem(in)
-      readItemList(n - 1, inNext, it :: acc)
+      val (node, inNext) = readNode(in)
+      readNodeList(n - 1, inNext, node :: acc)
